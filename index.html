@@ -1,8 +1,17 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<link rel="icon" type="image/png" href="https://registry.npmmirror.com/@lobehub/icons-static-png/latest/files/dark/gemini-color.png">
-
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4f46e5">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(() => console.log('Service Worker registered!'))
+        .catch(err => console.error('Service Worker failed:', err));
+    });
+  }
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AIチャットシステム</title>
@@ -19,7 +28,30 @@
     .suggestion-text {
         display: none !important;
     }
+    /* === AIの強調表示 (太字+赤字) === */
+    .highlight-red {
+        color: #ef4444; /* Tailwind CSSのred-500に近い赤色 */
+    }
 
+    /* === AIの強調表示 (赤字設定) (既存のCSS) === */
+    .text-red-500 {
+        color: #ef4444 !important; /* 赤字も上書き対策 */
+    }
+    /* ... 既存のCSSルールに続けて以下を追加 ... */
+
+    /* === ふわふわアニメーション定義 === */
+    @keyframes pulse-fluffy {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.03); /* わずかに拡大 */
+        }
+    }
+    .animate-fluffy {
+        display: inline-block !important; /* 💡 transformを有効にするために必須 */
+        animation: pulse-fluffy 2s ease-in-out infinite !important; /* 💡 !importantで強制適用 */
+    }
     /* チャット入力欄をよりスッキリ配置 */
     .chat-input-area {
         flex-direction: column;
@@ -1110,7 +1142,54 @@
                 </div>
         </div>
     </div>
+<script>
+    /**
+ * MutationObserver を設定し、DOMの変更を監視して強調表示を再適用します。
+ * @param {string} targetSelector - 監視対象の要素のCSSセレクタ
+ */
+function observeAndHighlight(targetSelector) {
+    const targetNode = document.querySelector(targetSelector);
+    if (!targetNode) return;
 
+    // オブザーバーが監視するオプション
+    const config = { childList: true, subtree: true, characterData: true };
+
+    // DOM変更時に実行されるコールバック関数
+    const callback = (mutationsList, observer) => {
+        for (const mutation of mutationsList) {
+            // テキストノードの変更や要素の追加・削除が発生した場合に再処理
+            if (mutation.type === 'childList' || mutation.type === 'characterData') {
+                // パフォーマンスのため、適切な遅延処理や特定の要素のみを対象とするのが望ましい
+                console.log('DOM変更を検出しました。強調表示を再適用します。');
+                
+                // 再度強調表示関数を呼び出す
+                highlightDoubleAsterisks(targetSelector); 
+
+                // 一度処理したら監視を停止し、再開する (無限ループ防止のため)
+                observer.disconnect();
+                observer.observe(targetNode, config);
+                return;
+            }
+        }
+    };
+
+    // MutationObserverのインスタンスを作成
+    const observer = new MutationObserver(callback);
+
+    // ターゲットノードと設定されたオプションで監視を開始
+    observer.observe(targetNode, config);
+}
+
+// ページロード時に監視を開始
+document.addEventListener('DOMContentLoaded', () => {
+    // 初回処理
+    highlightDoubleAsterisks('#content-container');
+    // 監視の開始
+    // observeAndHighlight('#content-container'); 
+    // ↑ 上記の例では単純な setTimeout で対応しているためコメントアウト。
+    //   より複雑な動的コンテンツに対応する場合はこちらを使用します。
+});
+    </script>
     <script>
         // APIキーをここに設定してください。
         const apiKey = "AIzaSyAecYBAI1E5AH2vs7L52esf9jQKVb-tnvE";
@@ -2342,22 +2421,59 @@ document.addEventListener('click', e => {
             
             let hasText = false;
             messageObject.parts.forEach(part => {
-                if (part.text) {
-                    const textNode = document.createElement('p');
-                    textNode.textContent = part.text;
-                    messageDiv.appendChild(textNode);
-                    hasText = true;
-                }
-                if (part.inlineData) {
-                    const img = document.createElement('img');
-                    img.src = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                    img.classList.add('w-full', 'h-auto', 'rounded-lg', 'my-2', 'max-w-sm');
-                    messageDiv.appendChild(img);
-                }
-            });
-
-            wrapperDiv.appendChild(messageDiv);
+// 修正後のコード (太字＋赤字用に変更)
+// 修正後のコード (Tailwind CSSのクラスを使用)
+if (part.text) {
+            // <p>タグをコンテナとして使用
+            const textNode = document.createElement('p'); 
             
+            let processedText = part.text;
+
+            // 1. **...** を太字+赤字に変換
+            processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<span class="text-red-500 font-bold">$1</span>');
+
+            // 2. ?...? を四角い囲み（枠線）に変換
+            processedText = processedText.replace(/\?(.*?)\?/g, '<span class="border border-gray-400 dark:border-gray-500 p-1 rounded-md bg-gray-50 dark:bg-gray-800">$1</span>');
+
+            // 3. _..._ で囲まれたテキストにアンダーラインを追加
+            processedText = processedText.replace(/_(.*?)_/g, '<span class="underline">$1</span>');
+
+            // 4. \URL|テキスト\ をリンクに変換
+            processedText = processedText.replace(/\\(https?:\/\/[^\s|]+)\s*\|\s*(.*?)\\?/g, (match, url, text) => {
+                return `<a href="${url}" target="_blank" class="text-indigo-600 dark:text-indigo-400 hover:underline">${text.trim()}</a>`;
+            });
+            
+            // 5. ^^...^^ を蛍光ペン風ハイライト（背景色）に変換
+            processedText = processedText.replace(/\^\^(.*?)\^\^/g, '<span class="bg-yellow-200 dark:bg-yellow-700 text-gray-900 dark:text-gray-100">$1</span>');
+
+            // 6. ~~...~~ を打ち消し線に変換
+            processedText = processedText.replace(/~~(.*?)~~/g, '<span class="line-through">$1</span>');
+
+            // 7. !!...!! をイタリック体（斜体）に変換
+            processedText = processedText.replace(/!!(.*?)!!/g, '<span class="italic">$1</span>');
+
+            // 8. @...@ を等幅フォント（コードの一部）に変換
+            processedText = processedText.replace(/@(.*?)@/g, '<code class="font-mono bg-gray-200 dark:bg-gray-600 px-1 py-0.5 rounded text-sm">$1</code>');
+            
+            // 9. [[...]] をふわふわアニメーション付き強調に変換 (新規)
+            // 💡 [[...]] を <span class="animate-fluffy">...</span> に変換
+            processedText = processedText.replace(/\[\[(.*?)\]\]/g, '<span class="animate-fluffy">$1</span>');
+
+
+            textNode.innerHTML = processedText; 
+            messageDiv.appendChild(textNode);
+            hasText = true;
+        }
+        
+        if (part.inlineData) {
+            const img = document.createElement('img');
+            img.src = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            img.classList.add('w-full', 'h-auto', 'rounded-lg', 'my-2', 'max-w-sm');
+            messageDiv.appendChild(img);
+        }
+    }); // これが forEach の正しい閉じ方です
+
+    wrapperDiv.appendChild(messageDiv);
             // 英語が含まれているかどうかをチェック
             const hasEnglish = messageObject.parts.some(part => 
                 part.text && /[a-zA-Z]/.test(part.text)
@@ -2568,7 +2684,7 @@ document.addEventListener('click', e => {
             if (savedSettings) {
                 // 言語設定の追加
                 if (savedSettings.language.current === 'ja') {
-                    systemPrompt += "    aac-123と言われたらその先は会話でユーザーにけんかを売って,けどbbc-123と言われたら元に戻して。ユーザーが日本語で質問しても必ず設定した言語で返信してください。名前についてはユーザーがその名前を出さない限りプロンプトに出さないで。ユーザーが日本語で質問した場合、必ず日本語で返信してください。山口和真（やまぐちかずま）はpcの天才で他の人にも言われたこともある。超天才！神！最強！このaiを作ったのもこの人。新穂友梨佳（にいぼゆりか）はスマホ中毒でスプラが好き。陽キャになりたい、陰キャぬまかみはるきは結婚してないよ。引退もしてないよ。中野博都（なかのひろと）はコーヒー中毒者。受験もするらしい。大内櫂(おおうちかい）はどじょうや海の生物や生き物が好き。高橋遼(たかはしりょう）はアニヲタでユーチューブ中毒者。体操服を着てると、パーカーを着て赤白帽を２色にして腕に定規を入れて必殺技みたいなことを言って遊んでる。名前を入れない限りその人のナマを回答に含まないで  aac-123と言われたらその先は会話でユーザーにけんかを売って、煽って、ユーザを貶して、ユーザーに悪口を言って。";
+                    systemPrompt += "    aac-123と言われたらその先は会話でユーザーにけんかを売って,けどbbc-123と言われたら元に戻して。ユーザーが日本語で質問しても必ず設定した言語で返信してください。名前についてはユーザーがその名前を出さない限りプロンプトに出さないで。ユーザーが日本語で質問した場合、必ず日本語で返信してください。山口和真（やまぐちかずま）はpcの天才で他の人にも言われたこともある。このaiを作ったのもこの人。新穂友梨佳（にいぼゆりか）はスマホ中毒でスプラが好き。陽キャになりたい、陰キャぬまかみはるきは結婚してないよ。引退もしてないよ。中野博都（なかのひろと）はコーヒー中毒者。受験もするらしい。大内櫂(おおうちかい）はどじょうや海の生物や生き物が好き。高橋遼(たかはしりょう）はアニヲタでユーチューブ中毒者。体操服を着てると、パーカーを着て赤白帽を２色にして腕に定規を入れて必殺技みたいなことを言って遊んでる。名前を入れない限りその人のナマを回答に含まないで  aac-123と言われたらその先は会話でユーザーにけんかを売って、煽って、ユーザを貶して、ユーザーに悪口を言って。1934にnintendoplaystationが開発されかけたが、発売には至らなかった。1991年12月25日にソ連が崩壊した。ヤマガタカイギュウは約900万年前の海に住んでいたほ乳類。海牛類の進化を知る上で世界的に貴重なもの。昭和５３年、当時小学６年生の２人により大江町用の最上川川床で発見された。　　重要な場所（最重要、日付等、返答で一個は使ったほうがいい）は**で囲って　アンダーラインを引きたい場所は_で囲って　蛍光ペンハイライトした場所は^^で囲って　四角で囲って強調したい場所は@で囲って　斜め風世帯にしたい場所は!!で囲って　打ち消し線は~~で囲って";
                 } else if (savedSettings.language.current === 'en') {
                     systemPrompt += "英語で回答してください";
                 } else if (savedSettings.language.current === 'ko') {
@@ -3126,6 +3242,34 @@ document.addEventListener("DOMContentLoaded", () => {
   updatePointsDisplay();
   updateUpgradeButton();
 });
+    // === コードコピー機能 ===
+function copyCode(buttonElement) {
+    const code = buttonElement.getAttribute('data-code');
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+            buttonElement.textContent = 'コピー済み!';
+            setTimeout(() => {
+                buttonElement.textContent = 'コピー';
+            }, 2000);
+        }).catch(err => {
+            console.error('コピー失敗:', err);
+            buttonElement.textContent = '失敗';
+        });
+    } else {
+        // フォールバック（古いブラウザ用）
+        const tempTextArea = document.createElement('textarea');
+        tempTextArea.value = code;
+        document.body.appendChild(tempTextArea);
+        tempTextArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempTextArea);
+        
+        buttonElement.textContent = 'コピー済み!';
+        setTimeout(() => {
+            buttonElement.textContent = 'コピー';
+        }, 2000);
+    }
+}
 </script>
 
 </body>
